@@ -35,7 +35,7 @@ class PointWarGame {
         this.amountCallback = null;
         this.currentAmount = 1;
         this.maxAmount = 1;
-        this.minAmount = 0.5;
+        this.minAmount = 1;
         this.gameOver = false;
         this.winner = null;
         this.isFirstTurn = true; // Skip income on first turn (players start with 6)
@@ -227,7 +227,7 @@ class PointWarGame {
                 if (this.isAdjacent(this.selectedCell.row, this.selectedCell.col, row, col)) {
                     this.targetCell = { row, col };
                     const max = this.grid[this.selectedCell.row][this.selectedCell.col].troops; // only unmoved
-                    this.showAmountSelector('选择移动兵力数量', 0.5, max, (amt) => this.executeMove(amt));
+                    this.showAmountSelector('选择移动兵力数量', 1, max, (amt) => this.executeMove(amt));
                 } else {
                     this.showMessage('⚠️ 请选择相邻的格子');
                 }
@@ -236,9 +236,13 @@ class PointWarGame {
             case 'place_target': {
                 const depCol = this.currentPlayer === 1 ? 0 : this.COLS - 1;
                 if (col === depCol && (cell.owner === this.currentPlayer || cell.owner === 0)) {
+                    const max = Math.floor(this.players[this.currentPlayer].reserves);
+                    if (max < 1) {
+                        this.showMessage('⚠️ 后备兵力不足，点击「结束回合」');
+                        return;
+                    }
                     this.targetCell = { row, col };
-                    const max = this.players[this.currentPlayer].reserves;
-                    this.showAmountSelector('选择放置兵力数量', 0.5, max, (amt) => this.executePlace(amt));
+                    this.showAmountSelector('选择放置兵力数量', 1, max, (amt) => this.executePlace(amt));
                 } else {
                     this.showMessage('⚠️ 请选择你放兵区内的可用格子（虚线标记）');
                 }
@@ -267,7 +271,7 @@ class PointWarGame {
                 break;
             }
             case 'place': {
-                if (this.players[this.currentPlayer].reserves < 0.5) {
+                if (Math.floor(this.players[this.currentPlayer].reserves) <= 0) {
                     this.showMessage('⚠️ 后备兵力不足！');
                     return;
                 }
@@ -302,9 +306,9 @@ class PointWarGame {
 
         // Subtract from unmoved troops
         src.troops -= amount;
-        if (src.troops <= 0.001) src.troops = 0;
+        if (src.troops <= 0) src.troops = 0;
         // If source cell is now empty (no troops of any kind), clear owner
-        if (this.totalTroops(src) <= 0.001) { src.troops = 0; src.movedTroops = 0; src.owner = 0; }
+        if (this.totalTroops(src) <= 0) { src.troops = 0; src.movedTroops = 0; src.owner = 0; }
 
         if (tgt.owner === this.currentPlayer || tgt.owner === 0) {
             // Friendly or empty — moved troops go to movedTroops
@@ -350,7 +354,7 @@ class PointWarGame {
         this.targetCell = null;
         // Return to place_target for more placements
         this.phase = 'place_target';
-        if (this.players[this.currentPlayer].reserves < 0.5) {
+        if (Math.floor(this.players[this.currentPlayer].reserves) <= 0) {
             this.showMessage('后备兵力已用完，点击「结束回合」');
         } else {
             this.showMessage('继续选择放兵区格子部署，或点击「结束回合」');
@@ -417,27 +421,48 @@ class PointWarGame {
 
     // ===== Amount Selector =====
     showAmountSelector(title, min, max, callback) {
-        this.minAmount = min;
-        this.maxAmount = max;
-        this.currentAmount = Math.min(1, max);
+        this.minAmount = Math.max(1, Math.floor(min));
+        this.maxAmount = Math.floor(max);
+        this.currentAmount = Math.max(this.minAmount, Math.min(this.maxAmount, Math.floor(this.currentAmount || 1)));
         this.amountCallback = callback;
+
         document.getElementById('modal-title').textContent = title;
-        document.getElementById('amount-value').textContent = this.fmt(this.currentAmount);
+        const input = document.getElementById('amount-input');
+        input.min = this.minAmount;
+        input.max = this.maxAmount;
+        input.value = this.currentAmount;
+        document.getElementById('amount-range').textContent = `${this.minAmount} ~ ${this.maxAmount}`;
         document.getElementById('modal').style.display = 'flex';
+        setTimeout(() => input.focus(), 50);
     }
 
     adjustAmount(delta) {
-        this.currentAmount = Math.max(this.minAmount,
-            Math.min(this.maxAmount, +(this.currentAmount + delta).toFixed(1)));
-        document.getElementById('amount-value').textContent = this.fmt(this.currentAmount);
+        let newAmount = this.currentAmount + delta;
+        this.currentAmount = Math.max(this.minAmount, Math.min(this.maxAmount, Math.floor(newAmount)));
+        document.getElementById('amount-input').value = this.currentAmount;
+    }
+
+    validateInput() {
+        const input = document.getElementById('amount-input');
+        let val = parseInt(input.value);
+        if (isNaN(val)) val = this.minAmount;
+
+        // Clamp value
+        val = Math.max(this.minAmount, Math.min(this.maxAmount, val));
+
+        this.currentAmount = val;
+        input.value = val;
     }
 
     setMaxAmount() {
         this.currentAmount = this.maxAmount;
-        document.getElementById('amount-value').textContent = this.fmt(this.currentAmount);
+        document.getElementById('amount-input').value = this.currentAmount;
     }
 
     confirmAmount() {
+        // Final validation before confirming
+        this.validateInput();
+
         document.getElementById('modal').style.display = 'none';
         if (this.amountCallback) {
             const cb = this.amountCallback;
