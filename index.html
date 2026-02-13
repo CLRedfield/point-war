@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>格点战争</title>
+  <link rel="stylesheet" href="style.css">
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700;900&display=swap" rel="stylesheet">
+</head>
+
+<body>
+  <div id="app">
+
+    <!-- ========== START SCREEN ========== -->
+    <div id="start-screen" class="start-screen">
+      <div class="start-content">
+        <div class="start-logo">⚔️</div>
+        <h1 class="start-title">格点战争</h1>
+        <p class="start-desc">在5×3的格点地图上，运用移动、部署与屯田的策略，<br>摧毁对方大本营，赢得胜利！</p>
+        <div class="start-rules">
+          <div class="rule-item"><span class="rule-icon">🗡️</span><span>移动步兵 — 向相邻格点进军</span></div>
+          <div class="rule-item"><span class="rule-icon">🏰</span><span>放置步兵 — 在放兵区部署后备兵力</span></div>
+          <div class="rule-item"><span class="rule-icon">🌾</span><span>屯田 — 积累经济，提升每回合收入</span></div>
+        </div>
+        <div class="start-btns">
+          <button class="start-btn local-btn" onclick="startLocalGame()">🎮 本地对战</button>
+          <button class="start-btn online-btn" onclick="showLobby()">🌐 在线对战</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ========== LOBBY SCREEN ========== -->
+    <div id="lobby-screen" class="lobby-screen" style="display:none">
+      <div class="lobby-content">
+        <h1 class="lobby-title">🌐 在线对战</h1>
+
+        <!-- Step 1: Enter nickname -->
+        <div id="lobby-nick" class="lobby-step">
+          <label class="lobby-label">输入你的昵称</label>
+          <input type="text" id="nick-input" class="lobby-input" placeholder="昵称" maxlength="12" autocomplete="off">
+          <div class="lobby-btns">
+            <button class="lobby-btn create-btn" onclick="createRoom()">🏠 创建房间</button>
+            <button class="lobby-btn join-btn" onclick="showJoinInput()">🚪 加入房间</button>
+          </div>
+        </div>
+
+        <!-- Step 2a: Waiting for opponent (host) -->
+        <div id="lobby-wait" class="lobby-step" style="display:none">
+          <div class="room-code-display">
+            <span class="room-code-label">房间号</span>
+            <span class="room-code" id="room-code-text">----</span>
+          </div>
+          <p class="lobby-hint">将房间号分享给对手，等待加入…</p>
+          <div class="waiting-dots"><span></span><span></span><span></span></div>
+        </div>
+
+        <!-- Step 2b: Join room input -->
+        <div id="lobby-join" class="lobby-step" style="display:none">
+          <label class="lobby-label">输入房间号</label>
+          <input type="text" id="room-code-input" class="lobby-input room-input" placeholder="4位房间号" maxlength="4"
+            autocomplete="off">
+          <button class="lobby-btn join-confirm-btn" onclick="joinRoom()">加入</button>
+        </div>
+
+        <!-- Error message -->
+        <p class="lobby-error" id="lobby-error" style="display:none"></p>
+
+        <button class="lobby-back-btn" onclick="lobbyBack()">← 返回主页</button>
+      </div>
+    </div>
+
+    <!-- ========== GAME SCREEN ========== -->
+    <div id="game-screen" class="game-screen" style="display:none">
+      <header>
+        <h1>⚔️ 格点战争</h1>
+        <div class="turn-info">
+          <span id="turn-number">回合 1</span>
+          <span id="current-player" class="p1">玩家一的回合</span>
+          <span id="online-badge" class="online-badge" style="display:none">🌐 在线</span>
+        </div>
+      </header>
+
+      <main>
+        <div class="player-panel p1-panel" id="panel-p1">
+          <div class="panel-header">
+            <div class="player-dot p1-dot"></div>
+            <h2>玩家一</h2>
+          </div>
+          <div class="base-hp">
+            <div class="hp-label">🏯 大本营</div>
+            <div class="hp-bar-container">
+              <div class="hp-bar p1-hp" id="p1-hp-bar" style="width:100%"></div>
+            </div>
+            <div class="hp-text"><span id="p1-hp">50</span> / 50</div>
+          </div>
+          <div class="stats">
+            <div class="stat"><span class="label">⚔️ 后备兵力</span><span class="value" id="p1-reserves">6</span></div>
+            <div class="stat"><span class="label">💰 每回合收入</span><span class="value" id="p1-income">1</span></div>
+            <div class="stat"><span class="label">🌾 屯田数</span><span class="value" id="p1-farm">0</span></div>
+            <div class="stat"><span class="label">📈 屯田加成</span><span class="value" id="p1-farmbonus">+0</span></div>
+            <div class="stat"><span class="label">📊 屯田进度</span><span class="value" id="p1-farm-progress">0/1</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="board-area">
+          <div class="board-container" id="board-container">
+            <svg id="edges" class="edges"></svg>
+            <div id="grid" class="grid"></div>
+          </div>
+          <div class="action-panel" id="action-panel">
+            <div class="message" id="message">选择本回合行动</div>
+            <div class="actions" id="actions">
+              <button class="action-btn move-btn" onclick="game.handleAction('move')">🗡️ 移动步兵</button>
+              <button class="action-btn place-btn" onclick="game.handleAction('place')">🏰 放置步兵</button>
+              <button class="action-btn farm-btn" onclick="game.handleAction('farm')">🌾 屯田</button>
+            </div>
+            <div class="sub-actions" id="sub-actions" style="display:none">
+              <button class="cancel-btn" id="btn-cancel" onclick="game.cancelAction()">✖ 取消选择</button>
+              <button class="end-turn-btn" id="btn-end-turn" onclick="game.endCurrentTurn()">✅ 结束回合</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="player-panel p2-panel" id="panel-p2">
+          <div class="panel-header">
+            <div class="player-dot p2-dot"></div>
+            <h2>玩家二</h2>
+          </div>
+          <div class="base-hp">
+            <div class="hp-label">🏯 大本营</div>
+            <div class="hp-bar-container">
+              <div class="hp-bar p2-hp" id="p2-hp-bar" style="width:100%"></div>
+            </div>
+            <div class="hp-text"><span id="p2-hp">50</span> / 50</div>
+          </div>
+          <div class="stats">
+            <div class="stat"><span class="label">⚔️ 后备兵力</span><span class="value" id="p2-reserves">6</span></div>
+            <div class="stat"><span class="label">💰 每回合收入</span><span class="value" id="p2-income">1</span></div>
+            <div class="stat"><span class="label">🌾 屯田数</span><span class="value" id="p2-farm">0</span></div>
+            <div class="stat"><span class="label">📈 屯田加成</span><span class="value" id="p2-farmbonus">+0</span></div>
+            <div class="stat"><span class="label">📊 屯田进度</span><span class="value" id="p2-farm-progress">0/1</span>
+            </div>
+          </div>
+        </div>
+      </main>
+
+      <!-- Amount Selector Modal -->
+      <div class="modal-overlay" id="modal" style="display:none">
+        <div class="modal">
+          <div class="modal-title" id="modal-title">选择数量</div>
+          <div class="modal-amount">
+            <button class="amt-btn" onclick="game.adjustAmount(-1)">-1</button>
+            <button class="amt-btn" onclick="game.adjustAmount(-0.5)">-½</button>
+            <span class="amount-value" id="amount-value">1</span>
+            <button class="amt-btn" onclick="game.adjustAmount(0.5)">+½</button>
+            <button class="amt-btn" onclick="game.adjustAmount(1)">+1</button>
+          </div>
+          <button class="amt-max-btn" onclick="game.setMaxAmount()">全部</button>
+          <div class="modal-actions">
+            <button class="modal-confirm" onclick="game.confirmAmount()">✔ 确认</button>
+            <button class="modal-cancel" onclick="game.cancelAmount()">✖ 取消</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Game Over Overlay -->
+      <div class="gameover-overlay" id="gameover" style="display:none">
+        <div class="gameover-content">
+          <div class="trophy">🏆</div>
+          <h2 id="winner-text">胜利！</h2>
+          <p id="winner-detail"></p>
+          <div class="gameover-btns">
+            <button class="restart-btn" onclick="game.restart()">🔄 再来一局</button>
+            <button class="back-btn" onclick="backToMenu()">🏠 返回主页</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Rules Button -->
+      <button class="rules-toggle" onclick="document.getElementById('rules').style.display='flex'">❓</button>
+      <div class="modal-overlay" id="rules" style="display:none"
+        onclick="if(event.target===this)this.style.display='none'">
+        <div class="modal rules-modal">
+          <h3>游戏规则</h3>
+          <ul>
+            <li><b>地图</b>：5×3格点，相邻格点上下左右相连</li>
+            <li><b>放兵区</b>：玩家一最左列，玩家二最右列</li>
+            <li><b>大本营</b>：50HP，敌方在你放兵区的兵力每回合造成等量伤害</li>
+            <li><b>收入</b>：每回合基础+1，占据中间格+0.5/格，屯田加成</li>
+            <li><b>行动</b>（三选一）：
+              <ul>
+                <li>🗡️ <b>移动步兵</b>：选源格→选相邻目标→选数量</li>
+                <li>🏰 <b>放置步兵</b>：将后备兵力部署到放兵区</li>
+                <li>🌾 <b>屯田</b>：按1,2,3,4,4,4...分组，每组+1收入</li>
+              </ul>
+            </li>
+            <li><b>战斗</b>：兵力多者胜，残余=差值</li>
+            <li><b>胜利</b>：摧毁对方大本营（HP归零）</li>
+          </ul>
+          <button class="modal-cancel" onclick="this.closest('.modal-overlay').style.display='none'">关闭</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+  <script src="firebase-config.js"></script>
+  <script src="room-manager.js"></script>
+  <script src="game.js"></script>
+</body>
+
+</html>
