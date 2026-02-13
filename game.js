@@ -605,8 +605,8 @@ class PointWarGame {
             currentPlayer: this.currentPlayer,
             turn: this.turn,
             isFirstTurn: this.isFirstTurn,
-            gameOver: this.gameOver,
-            winner: this.winner,
+            gameOver: this.gameOver || false,
+            winner: this.winner || 0, // 0 = no winner (Firebase rejects null/undefined)
             log: this.log.slice(-20) // Keep last 20 entries
         };
     }
@@ -620,8 +620,8 @@ class PointWarGame {
         this.currentPlayer = state.currentPlayer;
         this.turn = state.turn;
         this.isFirstTurn = state.isFirstTurn;
-        this.gameOver = state.gameOver;
-        this.winner = state.winner;
+        this.gameOver = state.gameOver || false;
+        this.winner = state.winner || null; // 0 → null
         this.log = state.log || [];
         this.phase = this.gameOver ? 'game_over' : 'action';
         this.turnAction = null;
