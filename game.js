@@ -16,7 +16,6 @@ class PointWarGame {
         this.roomCode = options.roomCode || null;
         this.p1Name = options.p1Name || '玩家一';
         this.p2Name = options.p2Name || '玩家二';
-        this._lastStateVersion = 0; // Track state version to avoid echo
 
         this.init();
     }
@@ -369,10 +368,7 @@ class PointWarGame {
     pushAndNextTurn() {
         this.nextTurn();
         if (this.onlineMode) {
-            this._lastStateVersion++;
-            const state = this.getState();
-            state._version = this._lastStateVersion;
-            pushGameState(this.roomCode, state);
+            pushGameState(this.roomCode, this.getState());
         }
     }
 
@@ -635,9 +631,9 @@ class PointWarGame {
 
     applyRemoteState(state) {
         if (!state || !state.grid) return;
-        // Ignore echo of our own push
-        if (state._version && state._version <= this._lastStateVersion) return;
-        this._lastStateVersion = state._version || 0;
+        // Only apply when it becomes my turn or game is over
+        // This naturally ignores echoes of our own push (which have opponent as currentPlayer)
+        if (state.currentPlayer !== this.myPlayer && !state.gameOver) return;
 
         this.loadState(state);
         if (this.gameOver) {
