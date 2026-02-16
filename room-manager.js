@@ -4,6 +4,8 @@
 
 let currentRoom = null;     // { code, ref, myPlayer, myName, stateUnsub }
 let stateListener = null;   // Firebase onValue unsubscribe
+let pendingGameType = null; // 'local', 'ai', or 'online'
+let selectedGameMode = 'classic'; // 'classic' or 'competitive'
 
 // ===== Screen helpers =====
 function showScreen(id) {
@@ -23,6 +25,34 @@ function lobbyError(msg) {
     const el = document.getElementById('lobby-error');
     el.textContent = msg;
     el.style.display = 'block';
+}
+
+// ===== Mode Selection =====
+function showModeSelect(gameType) {
+    pendingGameType = gameType;
+    document.getElementById('mode-select-overlay').style.display = 'flex';
+}
+
+function closeModeSelect() {
+    document.getElementById('mode-select-overlay').style.display = 'none';
+    pendingGameType = null;
+}
+
+function confirmModeSelect(mode) {
+    selectedGameMode = mode;
+    document.getElementById('mode-select-overlay').style.display = 'none';
+    switch (pendingGameType) {
+        case 'local':
+            startLocalGame();
+            break;
+        case 'ai':
+            startAIGame();
+            break;
+        case 'online':
+            showLobby();
+            break;
+    }
+    pendingGameType = null;
 }
 
 // ===== Navigation =====
@@ -63,7 +93,8 @@ async function createRoom() {
                 status: 'waiting',
                 hostName: name,
                 guestName: '',
-                createdAt: Date.now()
+                createdAt: Date.now(),
+                gameMode: selectedGameMode
             },
             state: null
         });
@@ -82,7 +113,7 @@ async function createRoom() {
                 // Guest joined! Start game
                 roomRef.child('meta/guestName').get().then(gSnap => {
                     const guestName = gSnap.val() || '玩家二';
-                    startOnlineGame(1, name, guestName, code);
+                    startOnlineGame(1, name, guestName, code, selectedGameMode);
                 });
             }
         });
@@ -122,6 +153,7 @@ async function joinRoom() {
 
         const myName = currentRoom.myName;
         const hostName = data.meta.hostName;
+        const roomGameMode = data.meta.gameMode || 'classic';
 
         await roomRef.child('meta').update({
             status: 'playing',
@@ -131,7 +163,7 @@ async function joinRoom() {
         currentRoom.code = code;
         currentRoom.ref = roomRef;
 
-        startOnlineGame(2, myName, hostName, code);
+        startOnlineGame(2, myName, hostName, code, roomGameMode);
 
     } catch (err) {
         lobbyError('加入失败: ' + err.message);
@@ -139,7 +171,7 @@ async function joinRoom() {
 }
 
 // ===== Start online game =====
-function startOnlineGame(myPlayer, myName, opponentName, roomCode) {
+function startOnlineGame(myPlayer, myName, opponentName, roomCode, gameMode) {
     showScreen('game-screen');
     document.getElementById('online-badge').style.display = 'inline-block';
 
@@ -151,7 +183,8 @@ function startOnlineGame(myPlayer, myName, opponentName, roomCode) {
         myPlayer: myPlayer,
         roomCode: roomCode,
         p1Name: p1Name,
-        p2Name: p2Name
+        p2Name: p2Name,
+        gameMode: gameMode || 'classic'
     });
 
     // Listen for remote state changes
@@ -192,7 +225,19 @@ function cleanupRoom() {
 function startLocalGame() {
     showScreen('game-screen');
     document.getElementById('online-badge').style.display = 'none';
-    game = new PointWarGame({ onlineMode: false });
+    game = new PointWarGame({ onlineMode: false, gameMode: selectedGameMode });
+}
+
+function startAIGame() {
+    showScreen('game-screen');
+    document.getElementById('online-badge').style.display = 'none';
+    game = new PointWarGame({
+        onlineMode: false,
+        aiMode: true,
+        p1Name: '🤖 AI',
+        p2Name: '你',
+        gameMode: selectedGameMode
+    });
 }
 
 function backToMenu() {

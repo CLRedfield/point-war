@@ -17,14 +17,23 @@ class PointWarGame {
         this.p1Name = options.p1Name || '玩家一';
         this.p2Name = options.p2Name || '玩家二';
 
+        // AI mode settings
+        this.aiMode = options.aiMode || false;
+
+        // Game mode: 'classic' or 'competitive'
+        this.gameMode = options.gameMode || 'classic';
+
         this.init();
     }
 
     init() {
         this.grid = [];
+        const p2Reserves = this.gameMode === 'competitive'
+            ? this.INITIAL_RESERVES + 1
+            : this.INITIAL_RESERVES;
         this.players = {
-            1: { reserves: this.INITIAL_RESERVES, farmCount: 0, hp: this.BASE_HP },
-            2: { reserves: this.INITIAL_RESERVES, farmCount: 0, hp: this.BASE_HP }
+            1: { reserves: this.INITIAL_RESERVES, farmCount: 0, hp: this.BASE_HP, lastAction: null, counterCount: 0 },
+            2: { reserves: p2Reserves, farmCount: 0, hp: this.BASE_HP, lastAction: null, counterCount: 0 }
         };
         this.currentPlayer = 1;
         this.turn = 1;
@@ -44,6 +53,11 @@ class PointWarGame {
         this.initGrid();
         this.buildBoard();
         this.render();
+
+        // Trigger AI if it's first player
+        if (this.aiMode && this.currentPlayer === 1) {
+            setTimeout(() => this.aiTurn(), 1000);
+        }
     }
 
     initGrid() {
@@ -71,10 +85,17 @@ class PointWarGame {
     }
 
     // ===== Farm Bonus Calculation =====
+    _farmGroupSize(groupIdx) {
+        if (this.gameMode === 'competitive') {
+            return groupIdx + 2; // 2, 3, 4, 5, 6...
+        }
+        return groupIdx < 3 ? groupIdx + 1 : 4; // 1, 2, 3, 4, 4, 4...
+    }
+
     calculateFarmBonus(farmCount) {
         let bonus = 0, consumed = 0, groupIdx = 0;
         while (true) {
-            const groupSize = groupIdx < 3 ? groupIdx + 1 : 4;
+            const groupSize = this._farmGroupSize(groupIdx);
             if (consumed + groupSize <= farmCount) {
                 consumed += groupSize;
                 bonus++;
@@ -87,7 +108,7 @@ class PointWarGame {
     getNextFarmGroup(farmCount) {
         let consumed = 0, groupIdx = 0;
         while (true) {
-            const groupSize = groupIdx < 3 ? groupIdx + 1 : 4;
+            const groupSize = this._farmGroupSize(groupIdx);
             if (consumed + groupSize <= farmCount) {
                 consumed += groupSize;
                 groupIdx++;
@@ -95,6 +116,32 @@ class PointWarGame {
                 return { groupSize, progress: farmCount - consumed };
             }
         }
+    }
+
+    // ===== Counter Mechanic (Competitive Mode) =====
+    checkCounter(playerNum, action) {
+        if (this.gameMode !== 'competitive') {
+            this.players[playerNum].lastAction = action;
+            return;
+        }
+        const opponent = playerNum === 1 ? 2 : 1;
+        const opponentLastAction = this.players[opponent].lastAction;
+        if (opponentLastAction !== null && opponentLastAction !== action) {
+            this.players[playerNum].counterCount++;
+            const bonus = 0.5 * this.players[playerNum].counterCount;
+            if (bonus > 0) {
+                this.players[playerNum].reserves += bonus;
+                this.addLog(`🔄 反制！玩家${this.pName(playerNum)}的「${this._actionName(action)}」克制了对手的「${this._actionName(opponentLastAction)}」，获得 ${bonus} 额外兵力（累计反制 ${this.players[playerNum].counterCount} 次）`);
+            } else {
+                this.addLog(`🔄 反制！玩家${this.pName(playerNum)}触发反制（累计 ${this.players[playerNum].counterCount} 次，尚未达到奖励阈值）`);
+            }
+        }
+        this.players[playerNum].lastAction = action;
+    }
+
+    _actionName(action) {
+        const names = { move: '移动', place: '放置', farm: '屯田' };
+        return names[action] || action;
     }
 
     // ===== Income =====
@@ -124,6 +171,10 @@ class PointWarGame {
             const cell = this.grid[r][depCol];
             if (cell.owner === opponent) {
                 totalDamage += this.totalTroops(cell);
+                // Kamikaze: troops die after dealing damage
+                cell.troops = 0;
+                cell.movedTroops = 0;
+                cell.owner = 0;
             }
         }
         if (totalDamage > 0) {
@@ -198,6 +249,7 @@ class PointWarGame {
 
     // ===== Online Mode: Turn Check =====
     isMyTurn() {
+        if (this.aiMode) return this.currentPlayer === 2;
         if (!this.onlineMode) return true;
         return this.currentPlayer === this.myPlayer;
     }
@@ -264,6 +316,7 @@ class PointWarGame {
                         if (this.grid[r][c].owner === this.currentPlayer && this.grid[r][c].troops > 0)
                             hasMovable = true;
                 if (!hasMovable) { this.showMessage('⚠️ 没有可移动的兵力！'); return; }
+                this.checkCounter(this.currentPlayer, 'move');
                 this.turnAction = 'move';
                 this.phase = 'move_source';
                 this.showMessage('选择要移动的兵力所在格子（闪烁的格子）');
@@ -282,6 +335,7 @@ class PointWarGame {
                     if (cell.owner === this.currentPlayer || cell.owner === 0) hasAvail = true;
                 }
                 if (!hasAvail) { this.showMessage('⚠️ 放兵区被敌方占据！'); return; }
+                this.checkCounter(this.currentPlayer, 'place');
                 this.turnAction = 'place';
                 this.phase = 'place_target';
                 this.showMessage('选择放兵区内的格子部署兵力（虚线格子）');
@@ -289,6 +343,7 @@ class PointWarGame {
                 break;
             }
             case 'farm':
+                this.checkCounter(this.currentPlayer, 'farm');
                 this.players[this.currentPlayer].farmCount++;
                 const bonus = this.calculateFarmBonus(this.players[this.currentPlayer].farmCount);
                 const fg = this.getNextFarmGroup(this.players[this.currentPlayer].farmCount);
@@ -411,6 +466,11 @@ class PointWarGame {
         this.selectedCell = null;
         this.targetCell = null;
         this.render();
+
+        // AI auto-play when it's AI's turn (player 1)
+        if (this.aiMode && this.currentPlayer === 1 && !this.gameOver) {
+            setTimeout(() => this.aiTurn(), 800);
+        }
     }
 
     endGame() {
@@ -555,6 +615,27 @@ class PointWarGame {
             document.getElementById(`${pn}-hp`).textContent = this.fmt(this.players[p].hp);
             document.getElementById(`${pn}-hp-bar`).style.width = Math.max(0, (this.players[p].hp / this.BASE_HP) * 100) + '%';
             document.getElementById(`panel-${pn}`).classList.toggle('active', this.currentPlayer === p);
+
+            // Counter display (competitive mode only)
+            const counterStat = document.getElementById(`${pn}-counter-stat`);
+            if (this.gameMode === 'competitive') {
+                counterStat.style.display = 'flex';
+                document.getElementById(`${pn}-counter`).textContent = this.players[p].counterCount;
+            } else {
+                counterStat.style.display = 'none';
+            }
+        }
+
+        // Mode badge
+        const modeBadge = document.getElementById('mode-badge');
+        if (this.gameMode === 'competitive') {
+            modeBadge.textContent = '🏆 竞技';
+            modeBadge.className = 'mode-badge competitive';
+            modeBadge.style.display = 'inline-block';
+        } else {
+            modeBadge.textContent = '⚔️ 经典';
+            modeBadge.className = 'mode-badge classic';
+            modeBadge.style.display = 'inline-block';
         }
 
         document.getElementById('turn-number').textContent = `回合 ${this.turn}`;
@@ -567,7 +648,12 @@ class PointWarGame {
         const isMyTurn = this.isMyTurn();
 
         if (this.phase === 'action') {
-            if (isMyTurn) {
+            if (this.aiMode && this.currentPlayer === 1) {
+                // AI's turn: hide all buttons, show thinking message
+                actions.style.display = 'none';
+                subActions.style.display = 'none';
+                this.showMessage('🤖 AI 思考中…');
+            } else if (isMyTurn) {
                 actions.style.display = 'flex';
                 subActions.style.display = 'none';
                 this.showMessage('选择本回合行动');
@@ -602,6 +688,107 @@ class PointWarGame {
         setTimeout(() => toast.remove(), 1800);
     }
 
+    // ===== AI Logic =====
+    aiTurn() {
+        if (this.gameOver || this.currentPlayer !== 1) return;
+
+        const reserves = Math.floor(this.players[1].reserves);
+        const depCol = 0; // AI's deployment column (player 1)
+
+        // Strategy 1: Move troops forward (toward enemy base, col+1)
+        // Scan right to left to push front first
+        for (let c = this.COLS - 2; c >= 0; c--) {
+            for (let r = 0; r < this.ROWS; r++) {
+                const cell = this.grid[r][c];
+                if (cell.owner === 1 && cell.troops > 0) {
+                    this.checkCounter(1, 'move');
+                    const tgtCol = c + 1;
+                    const tgt = this.grid[r][tgtCol];
+                    const amount = cell.troops;
+
+                    // Move forward
+                    cell.troops -= amount;
+                    if (this.totalTroops(cell) <= 0) { cell.troops = 0; cell.movedTroops = 0; cell.owner = 0; }
+
+                    if (tgt.owner === 1 || tgt.owner === 0) {
+                        tgt.movedTroops += amount;
+                        tgt.owner = 1;
+                        this.addLog(`🗡️ ${this.pName(1)}移动 ${this.fmt(amount)} 兵力到 (${r},${tgtCol})`);
+                    } else {
+                        // Combat
+                        const defTotal = this.totalTroops(tgt);
+                        if (amount > defTotal) {
+                            const remain = amount - defTotal;
+                            this.addLog(`⚔️ AI战斗！${this.fmt(amount)} vs ${this.fmt(defTotal)} → AI胜，剩余 ${this.fmt(remain)}`);
+                            tgt.troops = 0;
+                            tgt.movedTroops = remain;
+                            tgt.owner = 1;
+                        } else if (amount < defTotal) {
+                            const remain = defTotal - amount;
+                            this.addLog(`⚔️ AI战斗！${this.fmt(amount)} vs ${this.fmt(defTotal)} → 防御胜，剩余 ${this.fmt(remain)}`);
+                            tgt.troops = remain;
+                            tgt.movedTroops = 0;
+                        } else {
+                            this.addLog(`⚔️ AI战斗！${this.fmt(amount)} vs ${this.fmt(defTotal)} → 两败俱伤！`);
+                            tgt.troops = 0;
+                            tgt.movedTroops = 0;
+                            tgt.owner = 0;
+                        }
+                    }
+
+                    this.render();
+                    setTimeout(() => this.pushAndNextTurn(), 600);
+                    return;
+                }
+            }
+        }
+
+        // Strategy 2: Place troops if reserves available
+        if (reserves > 0) {
+            this.checkCounter(1, 'place');
+            // Find best deployment cell (preferring empty or own cells)
+            let bestRow = -1;
+            let bestScore = -1;
+            for (let r = 0; r < this.ROWS; r++) {
+                const cell = this.grid[r][depCol];
+                if (cell.owner === 1 || cell.owner === 0) {
+                    // Prefer cells that help advance (check if next col has enemy)
+                    let score = 1;
+                    if (depCol + 1 < this.COLS) {
+                        const nextCell = this.grid[r][depCol + 1];
+                        if (nextCell.owner === 2) score += 3; // prioritize attacking
+                        else if (nextCell.owner === 0) score += 2;
+                    }
+                    if (cell.owner === 0) score += 1; // claim empty cell
+                    if (score > bestScore) {
+                        bestScore = score;
+                        bestRow = r;
+                    }
+                }
+            }
+            if (bestRow >= 0) {
+                const cell = this.grid[bestRow][depCol];
+                cell.troops += reserves;
+                cell.owner = 1;
+                this.players[1].reserves -= reserves;
+                this.addLog(`🏰 ${this.pName(1)}放置 ${this.fmt(reserves)} 兵力`);
+                this.render();
+                // After placing, end turn
+                setTimeout(() => this.pushAndNextTurn(), 600);
+                return;
+            }
+        }
+
+        // Strategy 3: Farm if nothing else to do
+        this.checkCounter(1, 'farm');
+        this.players[1].farmCount++;
+        const bonus = this.calculateFarmBonus(this.players[1].farmCount);
+        const fg = this.getNextFarmGroup(this.players[1].farmCount);
+        this.addLog(`🌾 ${this.pName(1)}屯田 (加成: +${bonus}/回合, 进度: ${fg.progress}/${fg.groupSize})`);
+        this.render();
+        setTimeout(() => this.pushAndNextTurn(), 600);
+    }
+
     // ===== Utilities =====
     isAdjacent(r1, c1, r2, c2) { return Math.abs(r1 - r2) + Math.abs(c1 - c2) === 1; }
     fmt(n) { return n % 1 === 0 ? String(n) : n.toFixed(1); }
@@ -632,6 +819,7 @@ class PointWarGame {
             isFirstTurn: this.isFirstTurn,
             gameOver: this.gameOver || false,
             winner: this.winner || 0, // 0 = no winner (Firebase rejects null/undefined)
+            gameMode: this.gameMode,
             log: this.log.slice(-20) // Keep last 20 entries
         };
     }

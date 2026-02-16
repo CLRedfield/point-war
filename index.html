@@ -24,9 +24,38 @@
           <div class="rule-item"><span class="rule-icon">🌾</span><span>屯田 — 积累经济，提升每回合收入</span></div>
         </div>
         <div class="start-btns">
-          <button class="start-btn local-btn" onclick="startLocalGame()">🎮 本地对战</button>
-          <button class="start-btn online-btn" onclick="showLobby()">🌐 在线对战</button>
+          <button class="start-btn local-btn" onclick="showModeSelect('local')">🎮 本地对战</button>
+          <button class="start-btn ai-btn" onclick="showModeSelect('ai')">🤖 挑战AI</button>
+          <button class="start-btn online-btn" onclick="showModeSelect('online')">🌐 在线对战</button>
         </div>
+      </div>
+    </div>
+
+    <!-- ========== MODE SELECT MODAL ========== -->
+    <div id="mode-select-overlay" class="mode-select-overlay" style="display:none">
+      <div class="mode-select-modal">
+        <h2 class="mode-select-title">选择游戏模式</h2>
+        <div class="mode-cards">
+          <div class="mode-card classic-card" onclick="confirmModeSelect('classic')">
+            <div class="mode-card-icon">⚔️</div>
+            <h3 class="mode-card-name">经典模式</h3>
+            <ul class="mode-card-rules">
+              <li>双方初始兵力 6</li>
+              <li>屯田分组: 1, 2, 3, 4, 4, 4...</li>
+              <li>无特殊机制</li>
+            </ul>
+          </div>
+          <div class="mode-card competitive-card" onclick="confirmModeSelect('competitive')">
+            <div class="mode-card-icon">🏆</div>
+            <h3 class="mode-card-name">竞技模式</h3>
+            <ul class="mode-card-rules">
+              <li>后手初始兵力 +1</li>
+              <li>屯田分组: 2, 3, 4, 5, 6...</li>
+              <li>反制: 行动与对手不同额外获兵</li>
+            </ul>
+          </div>
+        </div>
+        <button class="mode-back-btn" onclick="closeModeSelect()">← 返回</button>
       </div>
     </div>
 
@@ -78,6 +107,7 @@
           <span id="turn-number">回合 1</span>
           <span id="current-player" class="p1">玩家一的回合</span>
           <span id="online-badge" class="online-badge" style="display:none">🌐 在线</span>
+          <span id="mode-badge" class="mode-badge" style="display:none"></span>
         </div>
       </header>
 
@@ -101,6 +131,7 @@
             <div class="stat"><span class="label">📈 屯田加成</span><span class="value" id="p1-farmbonus">+0</span></div>
             <div class="stat"><span class="label">📊 屯田进度</span><span class="value" id="p1-farm-progress">0/1</span>
             </div>
+            <div class="stat counter-stat" id="p1-counter-stat" style="display:none"><span class="label">🔄 反制次数</span><span class="value" id="p1-counter">0</span></div>
           </div>
         </div>
 
@@ -142,6 +173,7 @@
             <div class="stat"><span class="label">📈 屯田加成</span><span class="value" id="p2-farmbonus">+0</span></div>
             <div class="stat"><span class="label">📊 屯田进度</span><span class="value" id="p2-farm-progress">0/1</span>
             </div>
+            <div class="stat counter-stat" id="p2-counter-stat" style="display:none"><span class="label">🔄 反制次数</span><span class="value" id="p2-counter">0</span></div>
           </div>
         </div>
       </main>
@@ -206,7 +238,13 @@
               <ul>
                 <li>🗡️ <b>移动步兵</b>：选源格→选相邻目标→选数量</li>
                 <li>🏰 <b>放置步兵</b>：将后备兵力部署到放兵区</li>
-                <li>🌾 <b>屯田</b>：按1,2,3,4,4,4...分组，每组+1收入</li>
+                <li>🌾 <b>屯田</b>：经典模式按1,2,3,4,4,4...分组；竞技模式按2,3,4,5,6...分组，每组+1收入</li>
+              </ul>
+            </li>
+            <li><b>竞技模式特殊规则</b>：
+              <ul>
+                <li>后手初始兵力+1</li>
+                <li>反制：行动与对手上次行动不同，额外获得0.5×n兵力（n为累计触发反制次数）</li>
               </ul>
             </li>
             <li><b>战斗</b>：兵力多者胜，残余=差值</li>
